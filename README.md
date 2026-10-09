@@ -34,6 +34,40 @@ python3 -m http.server 8080
 
 Open <http://localhost:8080>.
 
+## Deploy to GitHub Pages
+
+Quill is packaged and deployed by the workflow in
+`.github/workflows/deploy-pages.yml`. The build contains only the browser app
+and generated schema context; development scripts and repository metadata are
+not published.
+
+1. Create a GitHub repository and push this project to its `main` branch.
+2. In **Settings → Pages**, set **Source** to **GitHub Actions**.
+3. Push to `main`, or run **Deploy Quill to GitHub Pages** from the Actions tab.
+4. Open `https://<owner>.github.io/<repository>/` after the deployment succeeds.
+
+All runtime URLs are relative, so the app works at a GitHub Pages project
+subpath without a repository-name setting. To check the exact deployment
+artifact locally:
+
+```bash
+python3 scripts/build_pages.py --output _site
+python3 -m http.server 8080 --directory _site
+```
+
+### Publishing warning
+
+`data/metax-context.json` contains the MetaX schema snapshot. Anyone who can
+open the Pages site can download that file. Only publish it to an audience that
+is allowed to see the schema; `noindex` metadata discourages search indexing
+but is not access control.
+
+GitHub Pages has no server runtime in which to hide an OpenAI API key. Quill's
+optional AI mode therefore remains bring-your-own-key and keeps the key only in
+the current tab's memory. Do not embed a shared key in JavaScript, the workflow,
+or the generated site. A shared AI deployment needs an authenticated server-side
+proxy.
+
 ## Answer modes
 
 ### Local retrieval
@@ -69,4 +103,6 @@ styles.css                        Responsive visual design
 app.js                            Search, retrieval, API, and rendering logic
 data/metax-context.json           Generated schema snapshot
 scripts/export_metax_context.py   Read-only MetaX source exporter
+scripts/build_pages.py            GitHub Pages artifact builder
+.github/workflows/deploy-pages.yml  GitHub Pages deployment workflow
 ```

@@ -22,7 +22,29 @@ const elements = {
   schemaSearch: el("schemaSearch"),
   schemaResults: el("schemaResults"),
   sidebar: el("sidebar"),
+  themeToggle: el("themeToggle"),
 };
+
+function currentTheme() {
+  return document.documentElement.dataset.theme || "light";
+}
+
+function renderThemeToggle() {
+  const dark = currentTheme() === "dark";
+  const label = dark ? "Switch to light theme" : "Switch to dark theme";
+  elements.themeToggle.setAttribute("aria-label", label);
+  elements.themeToggle.setAttribute("title", label);
+  elements.themeToggle.innerHTML = dark
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.2A8 8 0 0 1 8.8 3.8 8.5 8.5 0 1 0 20.2 15.2Z"/></svg>';
+}
+
+function toggleTheme() {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("quill_theme", next);
+  renderThemeToggle();
+}
 
 const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for",
@@ -403,7 +425,8 @@ function renderSchemaResults(query = "") {
 
 async function loadCatalog() {
   try {
-    const response = await fetch("data/metax-context.json", { cache: "no-store" });
+    const contextUrl = new URL("data/metax-context.json", document.baseURI);
+    const response = await fetch(contextUrl, { cache: "no-store" });
     if (!response.ok) throw new Error(`Context file returned ${response.status}`);
     state.catalog = await response.json();
     const fieldCount = state.catalog.models.reduce((sum, model) => sum + (model.fields || []).length, 0);
@@ -435,7 +458,8 @@ document.querySelectorAll(".suggestion").forEach((button) => {
   button.addEventListener("click", () => submitQuestion(button.dataset.question));
 });
 
-[el("settingsButton"), el("topSettingsButton"), el("modeButton")].forEach((button) => button.addEventListener("click", openSettings));
+[el("settingsButton"), el("modeButton")].forEach((button) => button.addEventListener("click", openSettings));
+elements.themeToggle.addEventListener("click", toggleTheme);
 el("closeSettings").addEventListener("click", closeSettings);
 elements.settingsModal.addEventListener("click", (event) => { if (event.target === elements.settingsModal) closeSettings(); });
 el("toggleKey").addEventListener("click", (event) => {
@@ -477,4 +501,5 @@ document.addEventListener("keydown", (event) => {
 });
 
 updateModeUi();
+renderThemeToggle();
 loadCatalog();
