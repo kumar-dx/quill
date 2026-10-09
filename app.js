@@ -17,6 +17,7 @@ const elements = {
   settingsModal: el("settingsModal"),
   apiKey: el("apiKey"),
   modelName: el("modelName"),
+  saveSettings: el("saveSettings"),
   apiStatusDot: el("apiStatusDot"),
   modeLabel: el("modeLabel"),
   schemaSearch: el("schemaSearch"),
@@ -429,12 +430,18 @@ function updateModeUi() {
 function openSettings() {
   elements.apiKey.value = state.apiKey;
   elements.modelName.value = state.model;
+  updateSaveSettingsState();
   elements.settingsModal.hidden = false;
   setTimeout(() => elements.apiKey.focus(), 0);
 }
 
 function closeSettings() {
   elements.settingsModal.hidden = true;
+}
+
+function updateSaveSettingsState() {
+  const complete = Boolean(elements.apiKey.value.trim() && elements.modelName.value.trim());
+  elements.saveSettings.disabled = !complete;
 }
 
 function renderSchemaResults(query = "") {
@@ -499,10 +506,13 @@ el("toggleKey").addEventListener("click", (event) => {
   elements.apiKey.type = visible ? "password" : "text";
   event.currentTarget.textContent = visible ? "Show" : "Hide";
 });
-el("saveSettings").addEventListener("click", () => {
+elements.apiKey.addEventListener("input", updateSaveSettingsState);
+elements.modelName.addEventListener("input", updateSaveSettingsState);
+elements.saveSettings.addEventListener("click", () => {
+  if (elements.saveSettings.disabled) return;
   state.apiKey = elements.apiKey.value.trim();
-  state.model = elements.modelName.value.trim() || "gpt-6-astra";
-  state.localOnly = !state.apiKey;
+  state.model = elements.modelName.value.trim();
+  state.localOnly = false;
   updateModeUi();
   closeSettings();
 });
@@ -510,6 +520,7 @@ el("useLocalMode").addEventListener("click", () => {
   state.localOnly = true;
   state.apiKey = "";
   elements.apiKey.value = "";
+  updateSaveSettingsState();
   updateModeUi();
   closeSettings();
 });

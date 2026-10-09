@@ -180,6 +180,7 @@ button { color: inherit; }
 .secondary-button, .primary-button { padding: 9px 12px; border-radius: 7px; cursor: pointer; font-size: 11px; }
 .secondary-button { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); }
 .primary-button { border: 1px solid var(--ink); background: var(--ink); color: var(--surface); }
+.primary-button:disabled { border-color: var(--line); background: var(--surface-subtle); color: var(--muted); cursor: not-allowed; opacity: .75; }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { border-radius: 10px; background: #cfcfca; }
