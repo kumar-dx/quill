@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Quill — ask questions about the MetaX data model and draft PostgreSQL queries." />
+    <title>Quill · MetaX schema assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32"><path d="M8 24c5-1 9-5 11-13 4 2 6 5 5 9-1 5-7 7-16 7v-3Z"/><path d="M9 23 24 8"/></svg>
+          </div>
+          <div>
+            <strong>Quill</strong>
+            <span>MetaX intelligence</span>
+          </div>
+        </div>
+
+        <button class="new-thread" id="newThreadButton">
+          <span>＋</span> New question
+          <kbd>⌘ K</kbd>
+        </button>
+
+        <section class="side-section">
+          <div class="section-label">Schema snapshot</div>
+          <div class="snapshot-card">
+            <div class="snapshot-status"><i></i><span id="snapshotStatus">Loading context…</span></div>
+            <div class="snapshot-grid">
+              <div><strong id="modelCount">—</strong><span>models</span></div>
+              <div><strong id="fieldCount">—</strong><span>fields</span></div>
+              <div><strong id="migrationCount">—</strong><span>migrations</span></div>
+            </div>
+            <div class="snapshot-meta"><span>Commit</span><code id="commitSha">unknown</code></div>
+          </div>
+        </section>
+
+        <section class="side-section grow">
+          <div class="section-heading">
+            <div class="section-label">Explore schema</div>
+            <button class="icon-button" id="clearSchemaSearch" aria-label="Clear schema search">×</button>
+          </div>
+          <label class="schema-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+            <input id="schemaSearch" placeholder="Table, field, or model" />
+          </label>
+          <div class="schema-results" id="schemaResults"></div>
+        </section>
+
+        <button class="settings-button" id="settingsButton">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+          API settings
+          <span id="apiStatusDot" class="api-dot"></span>
+        </button>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <button class="mobile-menu" id="mobileMenu" aria-label="Open navigation">☰</button>
+          <div>
+            <div class="eyebrow">READ-ONLY KNOWLEDGE ASSISTANT</div>
+            <h1>Ask the MetaX schema</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="safety-pill"><i></i> No database access</span>
+            <button class="icon-button large" id="topSettingsButton" aria-label="Open API settings">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12h3M2 12h3M12 2v3M12 19v3M17 7l2-2M5 19l2-2M17 17l2 2M5 5l2 2"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="chat-scroll" id="chatScroll">
+          <div class="welcome" id="welcome">
+            <div class="welcome-mark">
+              <svg viewBox="0 0 42 42"><path d="M9 31c7-1 12-7 15-18 6 3 9 7 7 13-2 7-10 10-22 9v-4Z"/><path d="m11 31 20-21"/></svg>
+            </div>
+            <p class="overline">METAX SCHEMA COPILOT</p>
+            <h2>From business question<br />to trustworthy SQL.</h2>
+            <p class="welcome-copy">Quill searches the model and migration catalog, traces relationships, and drafts PostgreSQL without touching production data.</p>
+
+            <div class="suggestion-grid">
+              <button class="suggestion" data-question="In which table can I get the quality rating of a vehicle?">
+                <span class="suggestion-icon purple">⌕</span>
+                <span><strong>Find a field</strong><small>Where is vehicle quality rating stored?</small></span>
+                <b>→</b>
+              </button>
+              <button class="suggestion" data-question="Give me SQL for vehicles procured in October 2026 whose inspection was done by rohit.kumar@drivex.in">
+                <span class="suggestion-icon blue">⌘</span>
+                <span><strong>Draft a query</strong><small>Procured vehicles by inspector and month</small></span>
+                <b>→</b>
+              </button>
+              <button class="suggestion" data-question="How are procurement leads, inspections, procured vehicles, and users related?">
+                <span class="suggestion-icon green">⑂</span>
+                <span><strong>Trace relationships</strong><small>Explain the procurement join path</small></span>
+                <b>→</b>
+              </button>
+              <button class="suggestion" data-question="Which migration introduced the quality_score field on inspections?">
+                <span class="suggestion-icon amber">↻</span>
+                <span><strong>Inspect history</strong><small>Find when a field was introduced</small></span>
+                <b>→</b>
+              </button>
+            </div>
+          </div>
+          <div class="messages" id="messages" aria-live="polite"></div>
+        </div>
+
+        <div class="composer-wrap">
+          <form class="composer" id="questionForm">
+            <textarea id="questionInput" rows="1" placeholder="Ask about a table, field, relationship, or request SQL…" aria-label="Question"></textarea>
+            <div class="composer-bottom">
+              <div class="context-indicator" id="contextIndicator"><span>◈</span> MetaX context ready</div>
+              <div class="composer-actions">
+                <button type="button" class="mode-button" id="modeButton"><i></i><span id="modeLabel">AI answer</span></button>
+                <button type="submit" class="send-button" id="sendButton" aria-label="Send question">
+                  <svg viewBox="0 0 24 24"><path d="m5 12 14-7-5 14-2-6-7-1Z"/></svg>
+                </button>
+              </div>
+            </div>
+          </form>
+          <p class="composer-note">Generated SQL is schema-checked but not executed. Verify business assumptions before use.</p>
+        </div>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="settingsModal" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <button class="modal-close" id="closeSettings" aria-label="Close settings">×</button>
+        <p class="overline">CONNECTION</p>
+        <h2 id="settingsTitle">API settings</h2>
+        <p>For this static POC, your key stays in page memory and is cleared when the tab closes. It is never written to disk or browser storage.</p>
+        <label class="field-label" for="apiKey">OpenAI API key</label>
+        <div class="secret-input">
+          <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" />
+          <button id="toggleKey" type="button">Show</button>
+        </div>
+        <label class="field-label" for="modelName">Model</label>
+        <input id="modelName" class="text-input" value="gpt-6-astra" />
+        <div class="privacy-callout"><strong>POC note</strong><span>Use a restricted development key. A production version should proxy requests through a server-side endpoint.</span></div>
+        <div class="modal-actions">
+          <button class="secondary-button" id="useLocalMode" type="button">Use local retrieval only</button>
+          <button class="primary-button" id="saveSettings" type="button">Use this session</button>
+        </div>
+      </section>
+    </div>
+
+    <template id="loadingTemplate">
+      <div class="message assistant-message loading-message">
+        <div class="avatar">Q</div>
+        <div class="message-body">
+          <div class="thinking"><i></i><i></i><i></i><span>Reading the schema graph…</span></div>
+        </div>
+      </div>
+    </template>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
