@@ -22,8 +22,14 @@ const elements = {
   schemaSearch: el("schemaSearch"),
   schemaResults: el("schemaResults"),
   sidebar: el("sidebar"),
+  mobileMenu: el("mobileMenu"),
   themeToggle: el("themeToggle"),
 };
+
+function setSidebarOpen(open) {
+  elements.sidebar.classList.toggle("open", open);
+  elements.mobileMenu.setAttribute("aria-expanded", String(open));
+}
 
 function currentTheme() {
   return document.documentElement.dataset.theme || "light";
@@ -119,6 +125,32 @@ function scoreModels(question, limit = 8) {
   }
 
   return [...selected, ...neighbors.slice(0, Math.max(0, 10 - selected.length))].slice(0, 10);
+}
+
+function filterSchemaModels(query = "") {
+  if (!state.catalog) return [];
+  const normalized = query.trim().toLowerCase();
+  const models = [...state.catalog.models];
+
+  if (!normalized) {
+    return models.sort((a, b) => a.table.localeCompare(b.table));
+  }
+
+  const tokens = tokenize(normalized);
+  return models
+    .map((model) => {
+      const table = model.table.toLowerCase();
+      const name = model.name.toLowerCase();
+      const haystack = searchableModel(model);
+      let score = haystack.includes(normalized) ? 20 : 0;
+      if (table === normalized || name === normalized) score += 100;
+      else if (table.startsWith(normalized) || name.startsWith(normalized)) score += 50;
+      score += tokens.reduce((total, token) => total + (haystack.includes(token) ? 4 : 0), 0);
+      return { model, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.model.table.localeCompare(b.model.table))
+    .map((entry) => entry.model);
 }
 
 function scoreMigrations(question, limit = 6) {
@@ -407,7 +439,7 @@ function closeSettings() {
 
 function renderSchemaResults(query = "") {
   if (!state.catalog) return;
-  const models = query.trim() ? scoreModels(query, 12) : state.catalog.models.slice(0, 12);
+  const models = filterSchemaModels(query);
   elements.schemaResults.innerHTML = models.length
     ? models.map((model) => `<button class="schema-item" data-table="${escapeHtml(model.table)}"><strong>${escapeHtml(model.table)}</strong><span>${escapeHtml(model.app)} · ${(model.fields || []).length} fields</span></button>`).join("")
     : `<div class="schema-empty">No matching table or field in this snapshot.</div>`;
@@ -418,7 +450,7 @@ function renderSchemaResults(query = "") {
       if (!model) return;
       const fieldNames = model.fields.slice(0, 12).map((field) => field.column || field.name).join(", ");
       submitQuestion(`Explain the ${table} table, its purpose, relationships, and these fields: ${fieldNames}`);
-      elements.sidebar.classList.remove("open");
+      setSidebarOpen(false);
     });
   });
 }
@@ -485,19 +517,24 @@ el("newThreadButton").addEventListener("click", () => {
   elements.messages.innerHTML = "";
   elements.welcome.hidden = false;
   elements.input.focus();
+  setSidebarOpen(false);
 });
 elements.schemaSearch.addEventListener("input", (event) => renderSchemaResults(event.target.value));
 el("clearSchemaSearch").addEventListener("click", () => {
   elements.schemaSearch.value = "";
   renderSchemaResults();
 });
-el("mobileMenu").addEventListener("click", () => elements.sidebar.classList.toggle("open"));
+elements.mobileMenu.addEventListener("click", () => setSidebarOpen(!elements.sidebar.classList.contains("open")));
+el("sidebarClose").addEventListener("click", () => setSidebarOpen(false));
 document.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     elements.input.focus();
   }
-  if (event.key === "Escape") closeSettings();
+  if (event.key === "Escape") {
+    closeSettings();
+    setSidebarOpen(false);
+  }
 });
 
 updateModeUi();
