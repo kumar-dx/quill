@@ -77,9 +77,6 @@ const SUGGESTIONS = {
 
 function updateCatalogCopy() {
   const catalogConfig = activeCatalogConfig();
-  el("appSubtitle").textContent = `${catalogConfig.label} intelligence`;
-  el("pageTitle").textContent = `Ask the ${catalogConfig.label} schema`;
-  el("welcomeOverline").textContent = `${catalogConfig.label} SCHEMA COPILOT`;
   el("welcomeCopy").textContent = `Quill searches the ${catalogConfig.label} model and change catalog, traces relationships, and drafts ${catalogConfig.dialect} SELECT queries without touching a database.`;
   document.querySelectorAll(".suggestion").forEach((button, index) => {
     const suggestion = SUGGESTIONS[state.catalogKey][index];
