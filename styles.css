@@ -58,6 +58,8 @@ button { color: inherit; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; }
 .section-label, .eyebrow, .overline { color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-size: 10px; font-weight: 700; }
 .snapshot-card { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.catalog-picker { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 9px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 10px; }
+.catalog-picker select { min-width: 0; height: 34px; border: 0; outline: 0; background: var(--surface); color: var(--ink); font-size: 11px; }
 .snapshot-status { display: flex; align-items: center; gap: 7px; padding: 9px 10px; border-bottom: 1px solid var(--line-soft); color: var(--ink-soft); font-size: 11px; }
 .snapshot-status i, .safety-pill i, .mode-button i { width: 5px; height: 5px; border-radius: 50%; background: var(--success); }
 .snapshot-grid { display: grid; grid-template-columns: repeat(3, 1fr); padding: 11px 5px; }

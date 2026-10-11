@@ -1,9 +1,13 @@
 # Quill
 
 Quill is a static proof-of-concept for asking questions about the MetaX Django
-schema and drafting PostgreSQL queries. It indexes model and migration source
-into a JSON snapshot, retrieves relevant schema fragments in the browser, and
-optionally sends those fragments to the OpenAI Responses API.
+and ERPX Frappe schemas and drafting read-only SQL. It indexes source metadata
+into separate JSON snapshots, retrieves relevant schema fragments in the
+browser, and optionally sends those fragments to the OpenAI Responses API.
+
+The context picker also provides a **Shared** view. It combines both committed
+snapshots in the browser and tags every model and change with its source system;
+it does not duplicate the data into a third generated file.
 
 Quill never connects to or executes against a database.
 
@@ -22,6 +26,19 @@ or require database credentials.
 
 Regenerate the JSON whenever MetaX models or migrations change. The snapshot
 records the source Git commit so answers can identify their schema version.
+
+## Generate the ERPX context
+
+```bash
+python3 scripts/export_erpx_context.py \
+  --repo /Users/rohit.kumar/Documents/drivex/erpx \
+  --output data/erpx-context.json
+```
+
+This exporter reads Frappe DocType JSON, Custom Field fixtures, and patch
+manifests. It does not import Frappe, read site configuration or `.env` files,
+or connect to MariaDB. By default it includes every app under
+`frappe-bench/apps`; pass `--apps drivex erpnext frappe` to limit the snapshot.
 
 ## Run locally
 
@@ -57,10 +74,10 @@ python3 -m http.server 8080 --directory _site
 
 ### Publishing warning
 
-`data/metax-context.json` contains the MetaX schema snapshot. Anyone who can
-open the Pages site can download that file. Only publish it to an audience that
-is allowed to see the schema; `noindex` metadata discourages search indexing
-but is not access control.
+`data/metax-context.json` and `data/erpx-context.json` contain the schema
+snapshots. Anyone who can open the Pages site can download those files. Only
+publish them to an audience that is allowed to see the schema; `noindex`
+metadata discourages search indexing but is not access control.
 
 GitHub Pages has no server runtime in which to hide an OpenAI API key. Quill's
 optional AI mode therefore remains bring-your-own-key and keeps the key only in
@@ -90,7 +107,10 @@ secret and applies authentication, rate limits, and audit logging.
 
 ## Safety boundary
 
-- Generated SQL is limited by instruction to PostgreSQL `SELECT` drafts.
+- Generated SQL is limited by instruction to PostgreSQL or MariaDB `SELECT`
+  drafts, according to the selected context.
+- Shared-context answers may compare the two schemas, but do not generate
+  cross-database joins between MetaX and ERPX.
 - Table names returned by the model are checked against the JSON catalog.
 - SQL is not executed.
 - The POC is not a substitute for query review or business validation.
@@ -102,7 +122,9 @@ index.html                         Application shell
 styles.css                        Responsive visual design
 app.js                            Search, retrieval, API, and rendering logic
 data/metax-context.json           Generated schema snapshot
+data/erpx-context.json            Generated Frappe/ERPNext schema snapshot
 scripts/export_metax_context.py   Read-only MetaX source exporter
+scripts/export_erpx_context.py    Read-only ERPX DocType exporter
 scripts/build_pages.py            GitHub Pages artifact builder
 .github/workflows/deploy-pages.yml  GitHub Pages deployment workflow
 ```

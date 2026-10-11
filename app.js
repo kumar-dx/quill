@@ -1,5 +1,6 @@
 const state = {
   catalog: null,
+  catalogKey: "metax",
   apiKey: "",
   model: "gpt-6-astra",
   localOnly: true,
@@ -25,7 +26,67 @@ const elements = {
   sidebar: el("sidebar"),
   mobileMenu: el("mobileMenu"),
   themeToggle: el("themeToggle"),
+  catalogSelect: el("catalogSelect"),
 };
+
+const CATALOGS = {
+  metax: {
+    label: "MetaX",
+    path: "data/metax-context.json",
+    dialect: "PostgreSQL",
+    migrationsLabel: "migrations",
+  },
+  erpx: {
+    label: "ERPX",
+    path: "data/erpx-context.json",
+    dialect: "MariaDB",
+    migrationsLabel: "patches",
+  },
+  shared: {
+    label: "Shared",
+    paths: ["data/metax-context.json", "data/erpx-context.json"],
+    dialect: "PostgreSQL + MariaDB",
+    migrationsLabel: "changes",
+  },
+};
+
+function activeCatalogConfig() {
+  return CATALOGS[state.catalogKey];
+}
+
+const SUGGESTIONS = {
+  metax: [
+    ["In which table can I get the quality rating of a vehicle?", "Where is vehicle quality rating stored?"],
+    ["Give me SQL for vehicles procured in October 2026 whose inspection was done by rohit.kumar@drivex.in", "Procured vehicles by inspector and month"],
+    ["How are procurement leads, inspections, procured vehicles, and users related?", "Explain the procurement join path"],
+    ["Which migration introduced the quality_score field on inspections?", "Find when a field was introduced"],
+  ],
+  erpx: [
+    ["Which DocType stores the item master and its purchasing details?", "Locate ERPNext item metadata"],
+    ["Draft a MariaDB SELECT for active stock items and their item groups", "Query active inventory items"],
+    ["How are Purchase Order, Purchase Order Item, and Supplier related?", "Trace a Frappe child-table join"],
+    ["Which patches mention purchase orders?", "Search ERPX patch history"],
+  ],
+  shared: [
+    ["Where is vehicle and item information represented across MetaX and ERPX?", "Compare models across both systems"],
+    ["Map MetaX procurement concepts to ERPX purchasing DocTypes", "Find conceptual integration points"],
+    ["Compare users and ownership fields in MetaX and ERPX", "Review identity relationships"],
+    ["Which schema should answer a vehicle procurement question?", "Choose the correct source system"],
+  ],
+};
+
+function updateCatalogCopy() {
+  const catalogConfig = activeCatalogConfig();
+  el("appSubtitle").textContent = `${catalogConfig.label} intelligence`;
+  el("pageTitle").textContent = `Ask the ${catalogConfig.label} schema`;
+  el("welcomeOverline").textContent = `${catalogConfig.label} SCHEMA COPILOT`;
+  el("welcomeCopy").textContent = `Quill searches the ${catalogConfig.label} model and change catalog, traces relationships, and drafts ${catalogConfig.dialect} SELECT queries without touching a database.`;
+  document.querySelectorAll(".suggestion").forEach((button, index) => {
+    const suggestion = SUGGESTIONS[state.catalogKey][index];
+    button.dataset.question = suggestion[0];
+    button.querySelector("small").textContent = suggestion[1];
+  });
+}
 
 function setSidebarOpen(open) {
   elements.sidebar.classList.toggle("open", open);
@@ -54,9 +115,9 @@ function toggleTheme() {
 }
 
 const STOP_WORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for",
+  "a", "across", "an", "and", "are", "as", "at", "be", "both", "by", "can", "compare", "comparison", "do", "for",
   "from", "get", "give", "how", "i", "in", "is", "it", "me", "of", "on",
-  "or", "that", "the", "this", "to", "was", "what", "when", "where", "which",
+  "or", "schema", "schemas", "that", "the", "this", "to", "was", "what", "when", "where", "which",
   "who", "whose", "with", "would", "you"
 ]);
 
@@ -68,8 +129,13 @@ function tokenize(value) {
     .filter((token) => token.length > 1 && !STOP_WORDS.has(token));
 }
 
+function tokenVariants(token) {
+  return token.length > 3 && token.endsWith("s") ? [token, token.slice(0, -1)] : [token];
+}
+
 function searchableModel(model) {
   return [
+    model.context,
     model.app,
     model.name,
     model.table,
@@ -86,6 +152,10 @@ function searchableModel(model) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
+function modelKey(model) {
+  return `${model.context || state.catalogKey}:${model.table}`;
+}
+
 function scoreModels(question, limit = 8) {
   if (!state.catalog) return [];
   const normalized = question.toLowerCase();
@@ -98,10 +168,11 @@ function scoreModels(question, limit = 8) {
     const haystack = searchableModel(model);
     let score = 0;
     for (const token of tokens) {
-      if (model.table.toLowerCase() === token || model.name.toLowerCase() === token) score += 18;
-      else if (model.table.toLowerCase().includes(token) || model.name.toLowerCase().includes(token)) score += 9;
-      if ((model.fields || []).some((field) => field.name.toLowerCase() === token || field.column?.toLowerCase() === token)) score += 12;
-      else if (haystack.includes(token)) score += 2;
+      const variants = tokenVariants(token);
+      if (variants.some((variant) => model.table.toLowerCase() === variant || model.name.toLowerCase() === variant)) score += 30;
+      else if (variants.some((variant) => model.table.toLowerCase().includes(variant) || model.name.toLowerCase().includes(variant))) score += 9;
+      if ((model.fields || []).some((field) => variants.some((variant) => field.name.toLowerCase() === variant || field.column?.toLowerCase() === variant))) score += 12;
+      else if (variants.some((variant) => haystack.includes(variant))) score += 2;
     }
     for (const target of glossaryTerms) {
       const [table, field] = String(target).split(".");
@@ -111,18 +182,29 @@ function scoreModels(question, limit = 8) {
     return { model, score };
   }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score);
 
-  const selected = scored.slice(0, limit).map((entry) => entry.model);
-  const selectedTables = new Set(selected.map((model) => model.table));
+  const selectedEntries = scored.slice(0, limit);
+  const wantsSharedCoverage = state.catalogKey === "shared"
+    && /\b(both|across|compare|comparison|map|mapping|metax|erpx)\b/i.test(question);
+  if (wantsSharedCoverage) {
+    for (const contextKey of ["metax", "erpx"]) {
+      if (selectedEntries.some((entry) => entry.model.context === contextKey)) continue;
+      const candidate = scored.find((entry) => entry.model.context === contextKey);
+      if (candidate) selectedEntries.splice(Math.max(0, selectedEntries.length - 1), 1, candidate);
+    }
+  }
+  const selected = selectedEntries.map((entry) => entry.model);
+  const selectedTables = new Set(selected.map(modelKey));
   const neighbors = [];
 
   for (const model of state.catalog.models) {
     const connected = (model.fields || []).some((field) =>
-      selectedTables.has(field.references?.table)
+      selectedTables.has(`${model.context || state.catalogKey}:${field.references?.table}`)
     );
     const selectedReferencesIt = selected.some((candidate) =>
-      (candidate.fields || []).some((field) => field.references?.table === model.table)
+      (candidate.context || state.catalogKey) === (model.context || state.catalogKey)
+      && (candidate.fields || []).some((field) => field.references?.table === model.table)
     );
-    if ((connected || selectedReferencesIt) && !selectedTables.has(model.table)) neighbors.push(model);
+    if ((connected || selectedReferencesIt) && !selectedTables.has(modelKey(model))) neighbors.push(model);
   }
 
   return [...selected, ...neighbors.slice(0, Math.max(0, 10 - selected.length))].slice(0, 10);
@@ -146,11 +228,11 @@ function filterSchemaModels(query = "") {
       let score = haystack.includes(normalized) ? 20 : 0;
       if (table === normalized || name === normalized) score += 100;
       else if (table.startsWith(normalized) || name.startsWith(normalized)) score += 50;
-      score += tokens.reduce((total, token) => total + (haystack.includes(token) ? 4 : 0), 0);
+      score += tokens.reduce((total, token) => total + (tokenVariants(token).some((variant) => haystack.includes(variant)) ? 4 : 0), 0);
       return { model, score };
     })
     .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || a.model.table.localeCompare(b.model.table))
+    .sort((a, b) => b.score - a.score || a.model.table.localeCompare(b.model.table) || (a.model.context || "").localeCompare(b.model.context || ""))
     .map((entry) => entry.model);
 }
 
@@ -170,6 +252,8 @@ function scoreMigrations(question, limit = 6) {
 
 function compactModel(model) {
   return {
+    context_system: model.context || state.catalogKey,
+    dialect: CATALOGS[model.context || state.catalogKey]?.dialect,
     app: model.app,
     model: model.name,
     table: model.table,
@@ -179,13 +263,17 @@ function compactModel(model) {
       column: field.column,
       type: field.type,
       primary_key: Boolean(field.primary_key),
+      stored: field.stored,
       null: field.null,
+      required: field.required,
       choices: field.choices,
       help_text: field.help_text,
       references: field.references,
+      dynamic_reference_field: field.dynamic_reference_field,
     })),
     indexes: model.indexes || [],
     constraints: model.constraints || [],
+    storage: model.storage,
     source: model.source,
   };
 }
@@ -200,9 +288,16 @@ function buildContext(question) {
 function localAnswer(question, context) {
   const lower = question.toLowerCase();
   const tables = context.models.map((model) => model.table);
-  const sources = context.models.slice(0, 5).map((model) => model.source);
+  const sourceModels = state.catalogKey === "shared"
+    ? [
+        context.models.find((model) => model.context === "metax"),
+        context.models.find((model) => model.context === "erpx"),
+        ...context.models,
+      ].filter((model, index, models) => model && models.indexOf(model) === index).slice(0, 5)
+    : context.models.slice(0, 5);
+  const sources = sourceModels.map((model) => `${model.context ? `${CATALOGS[model.context].label}: ` : ""}${model.source}`);
 
-  if (/quality.*rating|rating.*quality/.test(lower)) {
+  if (state.catalogKey === "metax" && (/quality.*rating|rating.*quality/.test(lower))) {
     return {
       answer: "For procurement inspections, use inspections.quality_rating_id and join quality_rating_configs.id to obtain the configured label and order. inspections.quality_score stores the raw NQS score, while inspections.rating is a separate legacy/free-text field. For DTC quality control, dtc_quality_checks.qc_rating is the relevant rating. The intended table depends on which stage of the vehicle lifecycle you mean.",
       sql: "SELECT\n    i.inspection_id,\n    i.vehicle_id,\n    qrc.label AS quality_rating,\n    qrc.\"order\" AS rating_order,\n    i.quality_score\nFROM inspections AS i\nLEFT JOIN quality_rating_configs AS qrc\n    ON qrc.id = i.quality_rating_id\nWHERE i.vehicle_id = :vehicle_id;",
@@ -214,7 +309,7 @@ function localAnswer(question, context) {
     };
   }
 
-  if (/procured|procurement/.test(lower) && /inspection|inspected/.test(lower) && /sql|query|fetch|vehicles/.test(lower)) {
+  if (state.catalogKey === "metax" && /procured|procurement/.test(lower) && /inspection|inspected/.test(lower) && /sql|query|fetch|vehicles/.test(lower)) {
     const year = question.match(/\b(20\d{2})\b/)?.[1] || "<year>";
     return {
       answer: "The normalized path is procured_vehicles → procurement_leads → inspections → users, with vehicles joined from procured_vehicles. The query below uses a half-open date interval so it remains index-friendly and avoids timestamp boundary errors.",
@@ -225,6 +320,28 @@ function localAnswer(question, context) {
       ambiguities: [],
       sources,
     };
+  }
+
+  if (state.catalogKey === "shared") {
+    const matches = ["metax", "erpx"]
+      .map((contextKey) => context.models.find((model) => model.context === contextKey))
+      .filter(Boolean);
+    if (matches.length) {
+      const descriptions = matches.map((model) => `${CATALOGS[model.context].label}: ${model.table} (${model.app}.${model.name})`);
+      const sharedTables = [...new Set([...matches.map((model) => model.table), ...tables])].slice(0, 6);
+      const columns = matches.flatMap((model) =>
+        (model.fields || []).slice(0, 4).map((field) => `${model.table}.${field.column || field.name}`)
+      );
+      return {
+        answer: `The closest matches by source system are ${descriptions.join("; ")}. This shared local result compares ranked evidence; connect an API key for a synthesized cross-system mapping.`,
+        sql: "",
+        tables: sharedTables,
+        columns,
+        assumptions: ["MetaX and ERPX are separate databases and are compared conceptually."],
+        ambiguities: matches.length < 2 ? ["Only one source system had a strong lexical match."] : [],
+        sources,
+      };
+    }
   }
 
   const lead = context.models[0];
@@ -238,7 +355,7 @@ function localAnswer(question, context) {
 
   const relevantFields = (lead.fields || []).slice(0, 8).map((field) => `${lead.table}.${field.column || field.name}`);
   return {
-    answer: `The closest match is ${lead.table}, represented by ${lead.app}.${lead.name}. Relevant fields include ${relevantFields.slice(0, 5).join(", ")}. Connect an API key for a synthesized answer and relationship-aware SQL.`,
+    answer: `The closest match is ${lead.table}${lead.context ? ` in ${CATALOGS[lead.context].label}` : ""}, represented by ${lead.app}.${lead.name}. Relevant fields include ${relevantFields.slice(0, 5).join(", ")}. Connect an API key for a synthesized answer and relationship-aware SQL.`,
     sql: "",
     tables: tables.slice(0, 5),
     columns: relevantFields,
@@ -264,6 +381,7 @@ const RESPONSE_SCHEMA = {
 };
 
 async function askOpenAI(question, context) {
+  const catalogConfig = activeCatalogConfig();
   const schemaContext = {
     snapshot: state.catalog.version,
     models: context.models.map(compactModel),
@@ -271,10 +389,15 @@ async function askOpenAI(question, context) {
   };
 
   const instructions = [
-    "You are Quill, a MetaX PostgreSQL schema assistant.",
+    `You are Quill, a ${catalogConfig.label} ${catalogConfig.dialect} schema assistant.`,
     "Use only the supplied schema context. Never invent a table, column, relationship, or business definition.",
     "When a question is ambiguous, explain the alternatives instead of silently choosing one.",
-    "Generate PostgreSQL SELECT queries only. Never generate mutations, DDL, multiple statements, or database execution instructions.",
+    ...(state.catalogKey === "shared"
+      ? ["Each model identifies its context_system and SQL dialect. For a question within one system, generate at most one SELECT statement in that system's dialect. For cross-system questions, compare or map the schemas conceptually and return an empty sql value; never invent a direct cross-database join."]
+      : [`Generate ${catalogConfig.dialect} SELECT queries only.`]),
+    "Never generate mutations, DDL, multiple statements, or database execution instructions.",
+    "Do not query models whose storage.physical_table is false.",
+    ...(["erpx", "shared"].includes(state.catalogKey) ? ["In ERPX, Frappe Link fields reference the target DocType name column; child tables join through parent, parenttype, and parentfield."] : []),
     "Prefer parameterized values where useful. Use half-open date ranges. State missing filters such as year as assumptions or ambiguities.",
     "The SQL is a draft and will not be executed. Include source paths from the supplied context.",
   ].join("\n");
@@ -294,7 +417,7 @@ async function askOpenAI(question, context) {
       text: {
         format: {
           type: "json_schema",
-          name: "metax_schema_answer",
+          name: "schema_answer",
           strict: true,
           schema: RESPONSE_SCHEMA,
         },
@@ -389,6 +512,7 @@ async function submitQuestion(question) {
   if (!question.trim() || state.busy || !state.catalog) return;
   state.busy = true;
   elements.send.disabled = true;
+  elements.catalogSelect.disabled = true;
   elements.welcome.hidden = true;
   addUserMessage(question.trim());
   const loading = el("loadingTemplate").content.cloneNode(true);
@@ -410,6 +534,7 @@ async function submitQuestion(question) {
   } finally {
     state.busy = false;
     elements.send.disabled = false;
+    elements.catalogSelect.disabled = false;
     elements.input.value = "";
     resizeTextarea();
     scrollToBottom();
@@ -448,12 +573,13 @@ function renderSchemaResults(query = "") {
   if (!state.catalog) return;
   const models = filterSchemaModels(query);
   elements.schemaResults.innerHTML = models.length
-    ? models.map((model) => `<button class="schema-item" data-table="${escapeHtml(model.table)}"><strong>${escapeHtml(model.table)}</strong><span>${escapeHtml(model.app)} · ${(model.fields || []).length} fields</span></button>`).join("")
+    ? models.map((model) => `<button class="schema-item" data-table="${escapeHtml(model.table)}" data-context="${escapeHtml(model.context || state.catalogKey)}"><strong>${escapeHtml(model.table)}</strong><span>${model.context ? `${escapeHtml(CATALOGS[model.context].label)} · ` : ""}${escapeHtml(model.app)} · ${(model.fields || []).length} fields</span></button>`).join("")
     : `<div class="schema-empty">No matching table or field in this snapshot.</div>`;
   elements.schemaResults.querySelectorAll(".schema-item").forEach((button) => {
     button.addEventListener("click", () => {
       const table = button.dataset.table;
-      const model = state.catalog.models.find((item) => item.table === table);
+      const contextKey = button.dataset.context;
+      const model = state.catalog.models.find((item) => item.table === table && (item.context || state.catalogKey) === contextKey);
       if (!model) return;
       const fieldNames = model.fields.slice(0, 12).map((field) => field.column || field.name).join(", ");
       submitQuestion(`Explain the ${table} table, its purpose, relationships, and these fields: ${fieldNames}`);
@@ -462,23 +588,71 @@ function renderSchemaResults(query = "") {
   });
 }
 
+async function fetchCatalog(path) {
+  const response = await fetch(new URL(path, document.baseURI), { cache: "no-store" });
+  if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+  return response.json();
+}
+
+function combineCatalogs(metax, erpx) {
+  const taggedModels = [
+    ...metax.models.map((model) => ({ ...model, context: "metax" })),
+    ...erpx.models.map((model) => ({ ...model, context: "erpx" })),
+  ];
+  const taggedMigrations = [
+    ...(metax.migrations || []).map((migration) => ({ ...migration, context: "metax" })),
+    ...(erpx.migrations || []).map((migration) => ({ ...migration, context: "erpx" })),
+  ];
+  const glossary = { ...(metax.glossary || {}) };
+  for (const [term, values] of Object.entries(erpx.glossary || {})) {
+    glossary[term] = [...new Set([...(glossary[term] || []), ...values])];
+  }
+  return {
+    version: {
+      commit_sha: "shared",
+      generated_at: [metax.version?.generated_at, erpx.version?.generated_at].filter(Boolean).sort().at(-1),
+      source_repository: "metax-database + erpx",
+      dialect: "mixed",
+      sources: { metax: metax.version, erpx: erpx.version },
+      format: 1,
+    },
+    models: taggedModels,
+    migrations: taggedMigrations,
+    glossary,
+  };
+}
+
 async function loadCatalog() {
+  const requestedKey = state.catalogKey;
+  const catalogConfig = activeCatalogConfig();
+  state.catalog = null;
+  elements.send.disabled = true;
+  el("snapshotStatus").textContent = `Loading ${catalogConfig.label}…`;
+  el("contextIndicator").textContent = `Loading ${catalogConfig.label} context…`;
   try {
-    const contextUrl = new URL("data/metax-context.json", document.baseURI);
-    const response = await fetch(contextUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error(`Context file returned ${response.status}`);
-    state.catalog = await response.json();
+    const catalog = catalogConfig.paths
+      ? combineCatalogs(...await Promise.all(catalogConfig.paths.map(fetchCatalog)))
+      : await fetchCatalog(catalogConfig.path);
+    if (requestedKey !== state.catalogKey) return;
+    state.catalog = catalog;
     const fieldCount = state.catalog.models.reduce((sum, model) => sum + (model.fields || []).length, 0);
     el("modelCount").textContent = state.catalog.models.length.toLocaleString();
     el("fieldCount").textContent = fieldCount.toLocaleString();
     el("migrationCount").textContent = (state.catalog.migrations || []).length.toLocaleString();
     el("commitSha").textContent = state.catalog.version?.commit_sha?.slice(0, 8) || "unknown";
-    el("snapshotStatus").textContent = "Context ready";
+    el("migrationLabel").textContent = catalogConfig.migrationsLabel;
+    el("snapshotStatus").textContent = `${catalogConfig.label} context ready`;
+    el("contextIndicator").innerHTML = `<span>◈</span> ${catalogConfig.label} · ${catalogConfig.dialect}`;
+    updateCatalogCopy();
+    elements.schemaSearch.value = "";
     renderSchemaResults();
   } catch (error) {
+    if (requestedKey !== state.catalogKey) return;
     el("snapshotStatus").textContent = "Context unavailable";
     el("contextIndicator").textContent = "Run the schema exporter first";
-    addError(new Error(`Could not load data/metax-context.json. ${error.message}`));
+    addError(new Error(`Could not load the ${catalogConfig.label} context. ${error.message}`));
+  } finally {
+    if (requestedKey === state.catalogKey) elements.send.disabled = !state.catalog;
   }
 }
 
@@ -531,6 +705,12 @@ el("newThreadButton").addEventListener("click", () => {
   setSidebarOpen(false);
 });
 elements.schemaSearch.addEventListener("input", (event) => renderSchemaResults(event.target.value));
+elements.catalogSelect.addEventListener("change", (event) => {
+  state.catalogKey = event.target.value;
+  elements.messages.innerHTML = "";
+  elements.welcome.hidden = false;
+  loadCatalog();
+});
 el("clearSchemaSearch").addEventListener("click", () => {
   elements.schemaSearch.value = "";
   renderSchemaResults();

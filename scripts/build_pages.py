@@ -15,6 +15,7 @@ PUBLIC_FILES = (
     Path("styles.css"),
     Path("app.js"),
     Path("data/metax-context.json"),
+    Path("data/erpx-context.json"),
 )
 
 
@@ -40,9 +41,9 @@ def main() -> None:
     if missing:
         raise SystemExit(f"Missing required public files: {', '.join(missing)}")
 
-    context_path = PROJECT_ROOT / "data/metax-context.json"
-    with context_path.open(encoding="utf-8") as context_file:
-        json.load(context_file)
+    for context_path in (PROJECT_ROOT / "data/metax-context.json", PROJECT_ROOT / "data/erpx-context.json"):
+        with context_path.open(encoding="utf-8") as context_file:
+            json.load(context_file)
 
     output.mkdir(parents=True, exist_ok=True)
     for relative_path in PUBLIC_FILES:
