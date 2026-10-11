@@ -507,22 +507,27 @@ function scrollToBottom() {
 
 async function submitQuestion(question) {
   if (!question.trim() || state.busy || !state.catalog) return;
+  const submittedQuestion = question.trim();
   state.busy = true;
   elements.send.disabled = true;
   elements.catalogSelect.disabled = true;
   elements.welcome.hidden = true;
-  addUserMessage(question.trim());
+  addUserMessage(submittedQuestion);
+  if (elements.input.value.trim() === submittedQuestion) {
+    elements.input.value = "";
+    resizeTextarea();
+  }
   const loading = el("loadingTemplate").content.cloneNode(true);
   elements.messages.appendChild(loading);
   const loadingNode = elements.messages.lastElementChild;
   scrollToBottom();
 
-  const context = buildContext(question);
+  const context = buildContext(submittedQuestion);
   el("contextIndicator").innerHTML = `<span>◈</span> ${context.models.length} relevant models selected`;
   try {
     const answer = state.localOnly || !state.apiKey
-      ? localAnswer(question, context)
-      : await askOpenAI(question, context);
+      ? localAnswer(submittedQuestion, context)
+      : await askOpenAI(submittedQuestion, context);
     loadingNode.remove();
     addAnswer(answer, state.localOnly || !state.apiKey ? "local" : "ai");
   } catch (error) {
@@ -532,8 +537,6 @@ async function submitQuestion(question) {
     state.busy = false;
     elements.send.disabled = false;
     elements.catalogSelect.disabled = false;
-    elements.input.value = "";
-    resizeTextarea();
     scrollToBottom();
   }
 }
