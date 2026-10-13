@@ -2,7 +2,7 @@ const state = {
   catalog: null,
   catalogKey: "metax",
   apiKey: "",
-  model: "gpt-6-astra",
+  model: "gpt-6-luna",
   localOnly: true,
   busy: false,
 };
